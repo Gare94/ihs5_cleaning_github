@@ -1,0 +1,456 @@
+---
+title: "ihs5_cleaning_gift"
+author: "Gareth Osman"
+date: "5/25/2021"
+output: html_document
+---
+
+INTRO
+
+We need to clean separately how much items came from gifts and other sources to be able to analyse their contribution to the total household intake. 
+
+```{r}
+#--- Load libraries 
+library(plyr)
+library(haven)
+library(magrittr)
+library(foreign)
+library(psych)
+library(readxl)
+library(labelled)
+library(tidyverse)
+
+#--- Change to show no scientific notation & round to 3 decimal places
+options(scipen = 10, digits=3) 
+
+#--- Read in the files
+ihs5 <- haven::read_dta("C:/Users/Gareth Osman/OneDrive - LUANAR/Documents/MAPS Project/ihs5 Cleaning/HH_MOD_G1.dta")
+ hhfilt <- haven::read_dta("C:/Users/Gareth Osman/OneDrive - LUANAR/Documents/MAPS Project/ihs5 Cleaning/hh_mod_a_filt.dta")
+convf <- haven::read_dta("C:/Users/Gareth Osman/OneDrive - LUANAR/Documents/MAPS Project/ihs5 Cleaning/ihs_foodconversion_factor_2020.dta")
+
+```
+
+>CHANGE VARIBLE NAMES AND DATA CLASS
+
+```{r}
+#--- Renaming variables to standard names 
+
+#Summary info 
+ ihs5 <- ihs5 %>% rename(
+      id = 'case_id',
+      consYN = 'hh_g01',
+      item_code = 'hh_g02',
+      item_oth = 'hh_g01_oth')
+
+
+ihs5$id <- as.character(ihs5$id)
+ihs5$consYN <- as.factor(ihs5$consYN)
+ihs5$item_name <- as.factor(ihs5$item_code)
+ihs5$item_oth <- as.factor(ihs5$item_oth)
+
+
+#G03: Quantity and units consumed of each food 
+ihs5 <- ihs5 %>% rename(
+      cons_quant = 'hh_g03a',
+      cons_unitA = 'hh_g03b',
+      cons_unit = 'hh_g03b_label',
+      cons_unit_oth = 'hh_g03b_oth',
+      cons_unit_size = 'hh_g03c')
+
+ihs5$cons_quant <- as.numeric(ihs5$cons_quant)
+ihs5$cons_unitA <- as.factor(ihs5$cons_unitA)
+ihs5$cons_unit <- as.factor(ihs5$cons_unit)
+ihs5$cons_unit_oth <- as.factor(ihs5$cons_unit_oth)
+ihs5$cons_unit_size <- as.factor(ihs5$cons_unit_size)
+
+
+#G04: Quantity and units purchased of each food 
+ihs5 <- ihs5 %>% rename(
+      purc_quant = 'hh_g04a',
+      purc_unitA = 'hh_g04b',
+      purc_unit = 'hh_g04b_label',
+      purc_unit_oth = 'hh_g04b_oth',
+      purc_unit_size = 'hh_g04c',
+      purc_price = 'hh_g05')
+
+ihs5$purc_quant <- as.numeric(ihs5$purc_quant)
+ihs5$purc_unitA <- as.factor(ihs5$purc_unitA)
+ihs5$purc_unit <- as.factor(ihs5$purc_unit)
+ihs5$purc_unit_oth <- as.factor(ihs5$purc_unit_oth)
+ihs5$purc_unit_size <- as.factor(ihs5$purc_unit_size)
+ihs5$purc_price <- as.numeric(ihs5$purc_price)
+
+#G06: Quantity and units home produced of each food
+ihs5 <- ihs5 %>% rename(
+      prod_quant = 'hh_g06a',
+      prod_unitA = 'hh_g06b',
+      prod_unit = 'hh_g06b_label',
+      prod_unit_oth = 'hh_g06b_oth',
+      prod_unit_size = 'hh_g06c')
+
+ihs5$prod_quant <- as.numeric(ihs5$prod_quant)
+ihs5$prod_unitA <- as.factor(ihs5$prod_unitA)
+ihs5$prod_unit <- as.factor(ihs5$prod_unit)
+ihs5$prod_unit_oth <-as.factor(ihs5$prod_unit_oth)
+ihs5$prod_unit_size <- as.factor(ihs5$prod_unit_size)
+
+#G07: Quantity and units gifted/other source of each food 
+ihs5 <- ihs5 %>% rename(
+      gift_quant = 'hh_g07a',
+      gift_unitA = 'hh_g07b',
+      gift_unit = 'hh_g07b_label',
+      gift_unit_oth = 'hh_g07b_oth',
+      gift_unit_size = 'hh_g07c')
+
+ihs5$gift_quant <- as.numeric(ihs5$gift_quant)
+ihs5$gift_unitA <- as.factor(ihs5$gift_unitA)
+ihs5$gift_unit <- as.factor(ihs5$gift_unit)
+ihs5$gift_unit_oth <- as.factor(ihs5$gift_unit_oth)
+ihs5$gift_unit_size <- as.factor(ihs5$gift_unit_size)
+
+#Removing a duplicate variable- item_code
+ ihs5 <- select(ihs5, -33)
+ 
+```
+
+>EXTRACTING VALUES AND LABELS OF LABELED 'ITEM_CODE'
+
+The ihs5 dataset has stored the variable 'item_code' as a label (dbl+lbl). Hence we need to extract a two column data frame of value and label. The label and values are stored as an attribute of data frame. 
+
+```{r}
+ihs5 %>% distinct(item_code)
+
+ihs5_attr <- stack(attr(ihs5$item_code, 'labels')) 
+
+#Changing variable class
+ihs5_attr$values <- as.factor(ihs5_attr$values)
+ihs5$item_code <- as.factor(ihs5$item_code)
+
+#Merging the values and labels back into the ihs5 dataset
+ihs5 %>% 
+    left_join(., ihs5_attr, by=c("item_code" = "values"))
+ihs5 <- ihs5 %>% 
+     left_join(., ihs5_attr, by=c("item_code" = "values"))
+
+ihs5 <- ihs5 %>% relocate("ind", .after = item_code)
+ihs5 <- ihs5 %>% rename(item_name_original = 'ind')
+
+ihs5 <- ihs5 %>% arrange(cons_unit) %>% arrange(item_code) %>% arrange(HHID)
+ihs5 <- ihs5 %>% select(id:consYN, item_code, item_name_original, item_oth:cons_unitA, cons_unit, cons_unit_oth:gift_unit_size)
+
+```
+
+ >CLEANING UNITS LABELED AS OTHER - VARIABLE 'GIFTS'
+
+```{r}
+ihs5 %>% filter(gift_unitA==23)
+
+ ihs5 %>% filter(gift_unit_oth!= "") %>% count(gift_unit_oth) %>% arrange(desc(n)) %>% print(n = nrow(ihs5))
+ 
+ #units listed as "other" and have not been converted to standard units
+ ihs5 %>% filter(gift_unitA==23) %>% count(gift_unit_oth) %>% arrange(desc(n)) %>% print(n = nrow(ihs5))
+
+ihs5 %>% filter(., gift_unit_oth=="HEAP") %>% select(item_name_original, item_code, gift_quant, gift_unitA, gift_unit, gift_unit_oth) %>% arrange(item_name_original) %>% print(n = nrow(ihs5))
+
+```
+
+```{r}
+
+#Cleaning top 9 known units labeled as 'Other'
+ihs5[ihs5$gift_unit_oth == "BASIN", "gift_unitA"] <- "27D"
+ihs5[ihs5$gift_unit_oth == "PLATE", "gift_unitA"] <- "7"
+ihs5[ihs5$gift_unit_oth == "TINA", "gift_unitA"] <- "25"
+ihs5[ihs5$gift_unit_oth == "PAIL (SMALL)", "gift_unitA"] <- "4A"
+ihs5[ihs5$gift_unit_oth == "5L BUCKET", "gift_unitA"] <- "26"
+ihs5[ihs5$gift_unit_oth == "PIECE", "gift_unitA"] <- "9"
+ihs5[ihs5$gift_unit_oth == "PACKET", "gift_unitA"] <- "60"
+ihs5[ihs5$gift_unit_oth == "SATCHET", "gift_unitA"] <- "22"
+ihs5[ihs5$gift_unit_oth == "PAIL", "gift_unitA"] <- "4"
+
+
+#Cleaning other known units labeled as 'Other'
+ihs5[ihs5$gift_unit_oth == "PAIL (MEDIUM)", "gift_unitA"] <- "4B"
+ihs5[ihs5$gift_unit_oth == "MILLILITRE", "gift_unitA"] <- "19"
+ihs5[ihs5$gift_unit_oth == "PAIL (LARGE)", "gift_unitA"] <- "4C"
+ihs5[ihs5$gift_unit_oth == "LITRE", "gift_unitA"] <- "15"
+ihs5[ihs5$gift_unit_oth == "TABLE SPOON", "gift_unitA"] <- "59"
+ihs5[ihs5$gift_unit_oth == "TABLESOON", "gift_unitA"] <- "59"
+ihs5[ihs5$gift_unit_oth == "TINA FLAT", "gift_unitA"] <- "25A"
+ihs5[ihs5$gift_unit_oth == "KILOGRAM", "gift_unitA"] <- "1"
+ihs5[ihs5$gift_unit_oth == "MANGO", "gift_unitA"] <- "9"
+ihs5[ihs5$gift_unit_oth == "GRAMS", "gift_unitA"] <- "18"
+ihs5[ihs5$gift_unit_oth == "PACKET UNSPECIFIED", "gift_unitA"] <- "51"
+ihs5[ihs5$gift_unit_oth == "HEAP", "gift_unitA"] <- "10"
+ihs5[ihs5$gift_unit_oth == "TINA HEAPED", "gift_unitA"] <- "25B"
+ihs5[ihs5$gift_unit_oth == "BIG PAILS", "gift_unitA"] <- "4C"
+ihs5[ihs5$gift_unit_oth == "CLUSTER", "gift_unitA"] <- "44"
+ihs5[ihs5$gift_unit_oth == "HEAP TINA", "gift_unitA"] <- "25B"
+ihs5[ihs5$gift_unit_oth == "LAIGE PAIL", "gift_unitA"] <- "4C"
+ihs5[ihs5$gift_unit_oth == "MEDIUM PALL", "gift_unitA"] <- "4B"
+ihs5[ihs5$gift_unit_oth == "MEDIUM. PAIL", "gift_unitA"] <- "4B"
+ihs5[ihs5$gift_unit_oth == "PAIL  LARGE", "gift_unitA"] <- "4C"
+ihs5[ihs5$gift_unit_oth == "SMMALL PAIL", "gift_unitA"] <- "4A"
+
+ihs5$gift_unitA <- as.character(ihs5$gift_unitA)
+ihs5[ihs5$gift_unit_oth == "BUNCH", "gift_unitA"] <- "8"
+ihs5$gift_unitA <- as.factor(ihs5$gift_unitA)
+
+```
+
+```{r}
+
+#Cleaning top 9 known units labeled as 'Other'
+ihs5[ihs5$gift_unit_oth == "BASIN", "gift_unit"] <- "27"
+ihs5[ihs5$gift_unit_oth == "PLATE", "gift_unit"] <- "7"
+ihs5[ihs5$gift_unit_oth == "TINA", "gift_unit"] <- "25"
+ihs5[ihs5$gift_unit_oth == "PAIL (SMALL)", "gift_unit"] <- "4"
+ihs5[ihs5$gift_unit_oth == "5L BUCKET", "gift_unit"] <- "26"
+ihs5[ihs5$gift_unit_oth == "PIECE", "gift_unit"] <- "9"
+ihs5[ihs5$gift_unit_oth == "PACKET", "gift_unit"] <- "60"
+ihs5[ihs5$gift_unit_oth == "SATCHET", "gift_unit"] <- "22"
+ihs5[ihs5$gift_unit_oth == "PAIL", "gift_unit"] <- "4"
+
+
+#Cleaning other known units labeled as 'Other'
+ihs5[ihs5$gift_unit_oth == "PAIL (MEDIUM)", "gift_unit"] <- "4"
+ihs5[ihs5$gift_unit_oth == "MILLILITRE", "gift_unit"] <- "19"
+ihs5[ihs5$gift_unit_oth == "PAIL (LARGE)", "gift_unit"] <- "4"
+ihs5[ihs5$gift_unit_oth == "LITRE", "gift_unit"] <- "15"
+ihs5[ihs5$gift_unit_oth == "TABLE SPOON", "gift_unit"] <- "59"
+ihs5[ihs5$gift_unit_oth == "TABLESOON", "gift_unit"] <- "59"
+ihs5[ihs5$gift_unit_oth == "TINA FLAT", "gift_unit"] <- "25"
+ihs5[ihs5$gift_unit_oth == "KILOGRAM", "gift_unit"] <- "1"
+ihs5[ihs5$gift_unit_oth == "MANGO", "gift_unit"] <- "9"
+ihs5[ihs5$gift_unit_oth == "GRAMS", "gift_unit"] <- "18"
+ihs5[ihs5$gift_unit_oth == "PACKET UNSPECIFIED", "gift_unit"] <- "51"
+ihs5[ihs5$gift_unit_oth == "HEAP", "gift_unit"] <- "10"
+ihs5[ihs5$gift_unit_oth == "TINA HEAPED", "gift_unit"] <- "25"
+ihs5[ihs5$gift_unit_oth == "BIG PAILS", "gift_unit"] <- "4"
+ihs5[ihs5$gift_unit_oth == "CLUSTER", "gift_unit"] <- "44"
+ihs5[ihs5$gift_unit_oth == "HEAP TINA", "gift_unit"] <- "25"
+ihs5[ihs5$gift_unit_oth == "LAIGE PAIL", "gift_unit"] <- "4"
+ihs5[ihs5$gift_unit_oth == "MEDIUM PALL", "gift_unit"] <- "4"
+ihs5[ihs5$gift_unit_oth == "MEDIUM. PAIL", "gift_unit"] <- "4"
+ihs5[ihs5$gift_unit_oth == "PAIL  LARGE", "gift_unit"] <- "4"
+ihs5[ihs5$gift_unit_oth == "SMMALL PAIL", "gift_unit"] <- "4"
+ihs5[ihs5$gift_unit_oth == "BUNCH", "gift_unit"] <- "8"
+
+```
+
+>CLEANING ITEMS LABELED AS 'OTHER'
+
+```{r}
+
+item_other <- ihs5 %>% count(item_oth) %>% arrange(desc(n)) %>% print(n = nrow(ihs5))
+
+```
+
+
+```{r}
+
+#Cleaning top 14 items labeled as 'Other'
+ihs5$item_code[ihs5$item_oth=='SOYA'] <- 301
+ihs5$item_code[ihs5$item_oth=='WILD LOQUAT'] <- 608
+ihs5$item_code[ihs5$item_oth=='EGG PLANT'] <- 402
+ihs5$item_code[ihs5$item_oth=='PEACHES'] <- 601
+ihs5$item_code[ihs5$item_oth=='SORGHUM FLOUR'] <- 108
+ihs5$item_code[ihs5$item_oth=='NKHUNGUZU'] <- 302
+ihs5$item_code[ihs5$item_oth=='COW PEAS'] <- 308
+ihs5$item_code[ihs5$item_oth=='FRIED MIXTURE OF MAIZE FLOUR/BANANA AND SODA'] <- 827
+ihs5$item_code[ihs5$item_oth=='POWDERED JUICE'] <- 906
+ihs5$item_code[ihs5$item_oth=='MUCUNA'] <- 837
+ihs5$item_code[ihs5$item_oth=='IRISH POTATOES AND FLOUR'] <- 821
+ihs5$item_code[ihs5$item_oth=='NKHWANI'] <- 404
+ihs5$item_code[ihs5$item_oth=='CASSAVA LEAVES'] <- 404
+ihs5$item_code[ihs5$item_oth=='FROZY'] <- 907
+
+
+#Cleaning other items labeled as 'Other' 
+ihs5$item_code[ihs5$item_oth=='GUAVAS'] <- 606
+ihs5$item_code[ihs5$item_oth=='MIXTURE OF MAIZE FLOUR/BANANA/SUGAR'] <- 827
+ihs5$item_code[ihs5$item_oth=='ZIBWENTE'] <- 821
+ihs5$item_code[ihs5$item_oth=='ZIBHWENTE'] <- 821
+ihs5$item_code[ihs5$item_oth=='ZIBWEMPWE'] <- 821
+ihs5$item_code[ihs5$item_oth=='ZIGEDE'] <- 821
+ihs5$item_code[ihs5$item_oth=='CHIGEGE'] <- 821
+ihs5$item_code[ihs5$item_oth=='WINE'] <- 914
+ihs5$item_code[ihs5$item_oth=='GROUND AND COOKED BEANS'] <- 302
+ihs5$item_code[ihs5$item_oth=='KHOBWE'] <- 308
+ihs5$item_code[ihs5$item_oth=='SOHGUM FLOUR (UFA)'] <- 108
+ihs5$item_code[ihs5$item_oth=='NTAPASHA (CASSAVA LEAVES)'] <- 404
+ihs5$item_code[ihs5$item_oth=='MKHAKA'] <- 409
+ihs5$item_code[ihs5$item_oth=='NTAPASHA'] <- 404
+ihs5$item_code[ihs5$item_oth=='RAPE'] <- 403
+ihs5$item_code[ihs5$item_oth=='NANAZI'] <- 604
+ihs5$item_code[ihs5$item_oth=='PEAGION PEAS'] <- 303
+ihs5$item_code[ihs5$item_oth=='MAPIRA'] <- 108
+ihs5$item_code[ihs5$item_oth=='GRASSHOPPER'] <- 511
+ihs5$item_code[ihs5$item_oth=='LOCUST'] <- 511
+ihs5$item_code[ihs5$item_oth=='ZIWALA'] <- 511
+ihs5$item_code[ihs5$item_oth=='MPILU'] <- 403
+ihs5$item_code[ihs5$item_oth=='KHUNGUZU'] <- 302
+ihs5$item_code[ihs5$item_oth=='MISALE'] <- 108
+ihs5$item_code[ihs5$item_oth=='KHOLOWA'] <- 404
+ihs5$item_code[ihs5$item_oth=='CHISOSO'] <- 404
+ihs5$item_code[ihs5$item_oth=='BONONGWE'] <- 404
+ihs5$item_code[ihs5$item_oth=='KHWANYA'] <- 404
+ihs5$item_code[ihs5$item_oth=='KWANYA'] <- 404
+ihs5$item_code[ihs5$item_oth=='MTAMBE'] <- 404
+ihs5$item_code[ihs5$item_oth=='LUNI'] <- 404
+ihs5$item_code[ihs5$item_oth=='MPHONDA'] <- 410
+ihs5$item_code[ihs5$item_oth=='EGGS PLANTS'] <- 402
+ihs5$item_code[ihs5$item_oth=='THERERE'] <- 411
+ihs5$item_code[ihs5$item_oth=='CHAMWAMBA'] <- 411
+ihs5$item_code[ihs5$item_oth=='CHITAMBE'] <- 404
+ihs5$item_code[ihs5$item_oth=='DORGHUM FLOUR'] <- 108
+ihs5$item_code[ihs5$item_oth=='GATHERED THERERE'] <- 411
+ihs5$item_code[ihs5$item_oth=='KATATA'] <- 411
+ihs5$item_code[ihs5$item_oth=='MABILINGANO'] <- 402
+ihs5$item_code[ihs5$item_oth=='PUMPKINS'] <- 410
+ihs5$item_code[ihs5$item_oth=='THERERE WACHINYOLOMONYA'] <- 411
+ihs5$item_code[ihs5$item_oth=='THERERE WAMASAMBA'] <- 411
+ihs5$item_code[ihs5$item_oth=='WILD THERERE'] <- 411
+ihs5$item_code[ihs5$item_oth=='DUCK'] <- 509
+ihs5$item_code[ihs5$item_oth=='ANTELOPE'] <- 505
+ihs5$item_code[ihs5$item_oth=='BIRD'] <- 509
+ihs5$item_code[ihs5$item_oth=='TSETSENYA (LOOKS LIKE IMSECTS'] <- 511
+ihs5$item_code[ihs5$item_oth=='CHIBUKU BEER'] <- 908
+ihs5$item_code[ihs5$item_oth=='FIRST CHOICE MILK'] <- 701
+ihs5$item_code[ihs5$item_oth=='SODA'] <- 812
+ihs5$item_code[ihs5$item_oth=='ROYCO'] <- 811
+ihs5$item_code[ihs5$item_oth=='MIXED BEANS'] <- 302
+ihs5$item_code[ihs5$item_oth=='BUTTER BEANS'] <- 301
+ihs5$item_code[ihs5$item_oth=='RED BEANS'] <- 302
+ihs5$item_code[ihs5$item_oth=='YELLOW BEANS'] <- 302
+ihs5$item_code[ihs5$item_oth=='ROASTED SWEET POTATO'] <- 832
+ihs5$item_code[ihs5$item_oth=='IRISH POTATOES'] <- 205
+ihs5$item_code[ihs5$item_oth=='PEPPER'] <- 811
+ihs5$item_code[ihs5$item_oth=='YAMS'] <- 208
+ihs5$item_code[ihs5$item_oth=='COCOYAMS'] <- 208
+ihs5$item_code[ihs5$item_oth=='COOKED SWEET POTATOES (VENDORS)'] <- 831
+ihs5$item_code[ihs5$item_oth=='NKHWALI'] <- 509
+ihs5$item_code[ihs5$item_oth=='BAKES'] <- 906
+ihs5$item_code[ihs5$item_oth=='BAKES JUICE'] <- 906
+ihs5$item_code[ihs5$item_oth=='DRAGON  FROZY'] <- 907
+ihs5$item_code[ihs5$item_oth=='JOLKY JUS'] <- 906
+ihs5$item_code[ihs5$item_oth=='JOLLY JAS JUICE'] <- 906
+ihs5$item_code[ihs5$item_oth=='THUMPS UP'] <- 907
+ihs5$item_code[ihs5$item_oth=='WAKA JUICE'] <- 906
+ihs5$item_code[ihs5$item_oth=='MEXICAN APPLE'] <- 609
+ihs5$item_code[ihs5$item_oth=='CUSTARD APPLE'] <- 609
+ihs5$item_code[ihs5$item_oth=='LEMON'] <- 603
+ihs5$item_code[ihs5$item_oth=='WILD FRUIT'] <- 608
+ihs5$item_code[ihs5$item_oth=='MAXICAN APPLE'] <- 609
+ihs5$item_code[ihs5$item_oth=='WILD PASSION FRUIT'] <- 608
+ihs5$item_code[ihs5$item_oth=='MEAN APPLE'] <- 609
+ihs5$item_code[ihs5$item_oth=='CUCUMBER'] <- 409
+ihs5$item_code[ihs5$item_oth=='MTAMBE'] <- 404
+ihs5$item_code[ihs5$item_oth=='PINEAPPLE'] <- 604
+
+```
+
+>MERGE IN CONVERSION FACTORS
+
+```{r}
+
+#Merge in household geovariables 
+ihs5 %>% left_join(., hhfilt, by = c("id" = "case_id"))
+ihs5 <- ihs5 %>% left_join(., hhfilt, by = c("id" = "case_id"))
+
+#Merge in conversion factors
+convf$item_code <- as.factor(convf$item_code)
+convf$region <- as.factor(convf$region)
+convf$unit_code <- as.factor(convf$unit_code)
+ihs5$region <- as.factor(ihs5$region)
+
+ihs5 %>% 
+    left_join(., convf, by=c("region" = "region",
+                             "item_code" = "item_code", 
+                             "gift_unitA" = "unit_code"))
+
+ihs5 <- ihs5 %>% 
+    left_join(., convf, by=c("region" = "region",
+                             "item_code" = "item_code", 
+                             "gift_unitA" = "unit_code"))
+
+ihs5 <- ihs5 %>% rename(
+  gift_item_name_factor = 'item_name',
+  gift_factor = 'factor',
+  gift_unit_name_factor = 'unit_name',
+  gift_Otherunit_factor = 'Otherunit')
+
+ihs5 <- ihs5 %>% select(id:item_name_original, gift_item_name_factor, item_oth, gift_quant:gift_unit_oth, gift_unit_name_factor:gift_factor,  region)
+
+```
+
+>CREATE DATA FRAME OF FOOD ITEMS ONLY CONSUMED BY HOUSEHOLD
+
+```{r}
+
+gift_consed <- ihs5 %>% filter(gift_quant != 0) %>% arrange(id)
+
+#Creating a unique id variable of fcode, ucode and rcode
+gift_consed$gift_unique_id <- paste0(as.character(gift_consed$item_code), "_",as.character(gift_consed$gift_unitA), "_", as.character(gift_consed$region))
+
+#Food unit codes in IHS5 without available factors from ihs5 conversion factor database
+gift_consed %>% filter(.,is.na(gift_factor))
+
+```
+
+>FILLING IN MISSING FACTORS(NAs) WITH AVAILABLE FACTORS FROM IHS4
+
+```{r}
+#--- Read in the file 
+ihs4factor <- read_excel ("C:/Users/Gareth Osman/OneDrive - LUANAR/Documents/MAPS Project/ihs5 Cleaning/ihs4factors_v5.xls")
+ihs4factor <- ihs4factor %>% select(measure_id:unit, ihs4factor_n:ihs4factor_s)
+
+#Renaming variables 
+names(ihs4factor) [names(ihs4factor) == 'ihs4factor_n'] <- '1'
+names(ihs4factor) [names(ihs4factor) == 'ihs4factor_c'] <- '2'
+names(ihs4factor) [names(ihs4factor) == 'ihs4factor_s'] <- '3'
+
+#Gather wide columns into a longer column by increasing the number of rows and decreasing the number of columns
+ihs4factor <- pivot_longer(ihs4factor, cols=6:8, names_to= "Region_ihs4factor", values_to = "ihs4factors", values_drop_na = TRUE)
+
+#Renaming variables
+ihs4factor <- ihs4factor %>% rename(
+ihs4_fcode = 'fcode',
+ihs4_item = 'item',
+ihs4_ucode = 'ucode',
+ihs4_unit = 'unit')
+
+ihs4factor$ihs4_fcode <- as.factor(ihs4factor$ihs4_fcode)
+
+#creating a unique id of fcode, ucode and rcode in the ihs4factor
+ ihs4factor$measure_id <- paste0(as.character(ihs4factor$measure_id), "_", as.character(ihs4factor$Region_ihs4factor))
+
+#creating a data frame of missing conversion factors
+ ihs5_factor_missing <- gift_consed %>% filter(.,is.na(gift_factor)) %>% select(id, gift_unique_id, item_code, item_name_original, gift_factor)
+
+ihs5_factor_missing %>% filter(.,is.na(gift_factor)) %>% count(gift_factor)
+
+#merge in ihs5_missing factor file with the ihs4_factors
+ihs5_factor_missing <- ihs5_factor_missing %>% left_join(., ihs4factor, by=c('gift_unique_id' = 'measure_id', 'item_code' = 'ihs4_fcode'))
+
+ihs5_factor_missing <- select(ihs5_factor_missing, -5)
+
+#filling in missing factors with available factors from ihs4 using the match function
+ gift_consed$gift_factor[is.na(gift_consed$gift_factor)] <- ihs5_factor_missing$ihs4factors[match(gift_consed$gift_unique_id, ihs5_factor_missing$gift_unique_id)][which(is.na(gift_consed$gift_factor))]
+ 
+gift_consed %>% filter(.,is.na(gift_factor)) %>% count(gift_factor)
+
+```
+ 
+>CREATING A NEW VARIABLE OF QUANTITY IN KG 
+
+the new variable was created by multiplying 'cons_quant' by 'factor'
+
+```{r}
+
+gift_consed <- gift_consed %>% mutate(gift_quant_kg = gift_quant * gift_factor)
+
+write.csv(gift_consed, "C:/Users/Gareth Osman/OneDrive - LUANAR/Documents/MAPS Project/ihs5 Cleaning/ihs5_gift_clean.csv")
+ 
+```
+
+
