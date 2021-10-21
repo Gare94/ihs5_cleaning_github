@@ -1,0 +1,61 @@
+---
+title: "fgMatch"
+author: "Gareth Osman"
+date: "8/5/2021"
+output: html_document
+---
+
+>Packages 
+
+```{r}
+library(epiDisplay)
+library(foreign)
+library(psych)
+library(tidyverse)
+
+```
+
+>Data
+
+```{r}
+
+ihs5 <- read.csv(here::here('hh_mod_g_nep.csv'))
+ihs5 <- select(ihs5, -X)
+
+foodgroup <- read.csv(here::here('FAO.12fg.csv'))
+foodgroup <- select(foodgroup, -X)
+
+```
+
+>Labeling food groups of food items
+
+We need to add a variable to group items by the food group that a food item fell under according to the FAO food groups for HDD. There are 12 food groups in total: 
+-Cereals
+-Vegetables 
+-Milk & milk products
+-Fats & oils 
+-Legumes & nuts
+-Fruits
+-Eggs
+-Meat
+-Fish 
+-Sugary foods/beverages 
+-Roots & tubers
+-Miscellaneous
+
+```{r}
+
+ihs5 <- merge(x=ihs5, y=foodgroup, by.x='item_code', by.y='code', fill=-9999, all.x = TRUE) %>% arrange(item_code) %>% arrange(HHID)
+
+ihs5 <- ihs5 %>% relocate("item_code", .after = g100_d_nep)
+ihs5 <- ihs5 %>% rename(food.group ='Category')
+
+```
+
+>DONE : ARCHIVE 
+
+```{r}
+
+write.csv(ihs5, here::here('hh_mod_g_nepFinal.csv'))
+
+```
