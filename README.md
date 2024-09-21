@@ -34,13 +34,13 @@ Below is a directory tree that outlines the structure of the repository:
 ## How to run the scripts 
 The scripts are in R markdown format, and for efficiency and the desired output, they should be run in the order listed below: 
 
-* 1. 1_ihs5_cleaning *
-* 2. 1B_ihs5_cleaning *
-* 3. 2_ihs5_nsu_conversion *
-* 4. afeIHS5 *
-* 5. 3_ihs5_outliers *
-* 6. fgMatch *
-* 7. fctmatchFinal *
+ *1_ihs5_cleaning*
+ *1B_ihs5_cleaning*
+ *2_ihs5_nsu_conversion*
+ *afeIHS5*
+ *3_ihs5_outliers*
+ *fgMatch*
+ *fctmatchFinal*
 
 
 
