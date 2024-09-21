@@ -42,5 +42,8 @@ The scripts are in R markdown format, and for efficiency and the desired output,
  6. *fgMatch*
  7. *fctmatchFinal*
 
+## Data-sources
+The Malawi's Fifth Integrated Household Survey (IHS5) data can be requested using the link provided below: <br>
 
+* [Malawi Fifth Integrated Household Survey 2019-2020](https://microdata.worldbank.org/index.php/catalog/3818) <br>
 
