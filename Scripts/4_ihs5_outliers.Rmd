@@ -158,9 +158,7 @@ This step entails removing food weights that were recalled as part of the HCES q
 
 ```{r}
 
-#EP <- read.csv (here::here('inter-output', 'edible_portion_clean.csv'))
-
-EP <- haven::read_dta(here::here('data', 'MWI_2019_IHS-V_v06_M_Stata', 'caloric_conversionfactor.dta'))
+EP <- read.csv (here::here('inter-output', 'edible_portion_clean.csv'))
 
 EP<- EP %>% select(item_code, edible_p)
 
@@ -168,7 +166,6 @@ EP$item_code <- as.factor(EP$item_code)
 ihs5$item_code <- as.factor(ihs5$item_code)
 
 ihs5<- ihs5 %>% left_join(., EP, by= 'item_code')
-
 
 ihs5$kg_d_nep <- ihs5$kg_d2 * (ihs5$edible_p/100)
 
