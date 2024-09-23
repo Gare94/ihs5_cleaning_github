@@ -30,9 +30,10 @@ foodgroup <- select(foodgroup, -X)
 
 > Labeling food groups of food items
 
+IHS5 categorises food items into 11 food groups, of course, with some food items mixed in between. Hence, we adapted the Food and Agriculture Organization (FAO) 12 food groups classification to organise the food items into their appropriate groups. 'FAO.12fg.csv' is the cleaned file. 
+
 We need to add a variable to group items by the food group that a food
-item fell under according to the FAO food groups for Household Dietary
-Diversity. There are 12 food groups in total: -Cereals -Vegetables -Milk
+item fell under according to the FAO food groups. There are 12 food groups in total: -Cereals -Vegetables -Milk
 & milk products -Fats & oils -Legumes & nuts -Fruits -Eggs -Meat -Fish
 -Sugary foods/beverages -Roots & tubers -Miscellaneous
 
