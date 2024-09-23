@@ -11,7 +11,7 @@ INTRO
 
 These scripts to clean ihs5 require specific files to run - these files are controlled by The World Bank, and protected by an account log in. The datasets needed are located here: <https://microdata.worldbank.org/index.php/catalog/3818/get-microdata>. Once logged in, please click download on the 'Data in Stata format' option. Once downloaded, please unzip the file, and move it to the 'data' folder of this repository; e.g. "GitHub\ihs5_cleaning_github\data\MWI_2019_IHS-V_v06_M_Stata".
 
-These scripts are designed to be run within a project in RStudio. If creating this project, please put the project file in the main folder (ihs5_cleaning_github).
+These scripts are designed to be run within a project in RStudio. One is included with this repo - ihs5_cleaning_github.Rproj; located in the main folder.
 
 Certain packages are used to clean the datasets. The code chunk below will check if they're installed, and install them if they aren't.
 

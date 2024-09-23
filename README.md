@@ -3,10 +3,12 @@
 
 ## Introducing the Malawi’s IHS5 data cleaning process
 
-Tang et al. (2021) and Adams et al. (2022) describe how to tidy, process, and transform HCES food consumption or acquisition data into usable metrics for estimating household-level apparent food consumption and micronutrient intake. We used the steps from Tang et al. and Adams et al. to analyse Malawi's IHS5 data.  This code repository was created to provide detailed instructions for cleaning and processing IHS5 data. The repository is divided into two sections. 
+Tang et al. (2021) and Adams et al. (2022) describe how to tidy, process, and transform HCES food consumption or acquisition data into usable metrics for estimating household-level apparent food consumption and micronutrient intake. We used the steps from Tang et al. and Adams et al. to analyse Malawi's IHS5 data.  This code repository was created to provide detailed instructions for cleaning and processing IHS5 data. The repository is divided into four sections. 
 
 * `scripts` - Series of R scripts for IHS5 data processing<br>
 * `data` - Complementary data relating to the scripts<br>
+* `inter-output` - The folder where intermediate outputs between scripts will be saved<br>
+* `output` - The folder where final outputs from the script will be saved<br>
 
 Below is a directory tree that outlines the structure of the repository:
 
@@ -31,6 +33,9 @@ Below is a directory tree that outlines the structure of the repository:
 ├─ output/ 
 
 ```
+This file system is designed to preserve the protections on the dataset provided by The World Bank. Any additional files saved in the data folder (or changes made to the files in the data folder), as well as files in the inter-output and output folders, will not be uploaded to github. This behavior is controlled by the .gitignore files in the main repo folder, and in the inter-output and output folders, should you wish to alter it. 
+
+
 ## How to run the scripts 
 The scripts are in R markdown format, and for efficiency and the desired output, they should be run in the order listed below: 
 
