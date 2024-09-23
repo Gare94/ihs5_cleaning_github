@@ -14,10 +14,10 @@ library(tidyverse)
 options(scipen = 10, digits=3) 
 
 #--- Read in the file
-ihs5 <- read.csv(here::here('hh_mod_g_initial.csv'))
+ihs5 <- read.csv(here::here('inter-output', 'hh_mod_g_initial.csv'))
 ihs5 <- select(ihs5, -X)
 
-ihs5factor.other <- read.csv(here::here('ihs5factor.other(23).csv'))
+ihs5factor.other <- read.csv(here::here('data', 'ihs5factor.other(23).csv'))
 ihs5factor.other <- select(ihs5factor.other, -X)
 ```
 > stage 2: CLEANING UNITS LABELED AS 'OTHER'
@@ -124,7 +124,7 @@ ihs5$measure_id[is.na(ihs5$cons_unit)] <- NA
 ihs5 <- ihs5 %>% filter(cons_quant !=0) %>% arrange(id)
 
 
-write.csv(ihs5, here::here('hh_mod_g_clean.csv'))
+write.csv(ihs5, here::here('inter-output', 'hh_mod_g_clean.csv'))
 
 ```
 

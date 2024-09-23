@@ -7,11 +7,30 @@ output: html_document
 
 INTRO 
 
+0) Data Preparation, and Environment setup
+
+These scripts to clean ihs5 require specific files to run - these files are controlled by The World Bank, and protected by an account log in. The datasets needed are located here: <https://microdata.worldbank.org/index.php/catalog/3818/get-microdata>. Once logged in, please click download on the 'Data in Stata format' option. Once downloaded, please unzip the file, and move it to the 'data' folder of this repository; e.g. "GitHub\ihs5_cleaning_github\data\MWI_2019_IHS-V_v06_M_Stata".
+
+These scripts are designed to be run within a project in RStudio. One is included with this repo - ihs5_cleaning_github.Rproj; located in the main folder.
+
+Certain packages are used to clean the datasets. The code chunk below will check if they're installed, and install them if they aren't.
+
+```{r}
+if (!require('haven')) install.packages('haven'); library('haven')
+if (!require('here')) install.packages('here'); library('here')
+if (!require('tidyverse')) install.packages('tidyverse'); library('tidyverse')
+if (!require('readxl')) install.packages('readxl'); library('readxl')
+if (!require('ggplot2')) install.packages('ggplot2'); library('ggplot2')
+if (!require('foreign')) install.packages('foreign'); library('foreign')
+```
+
+
 1) We need to identify where the data on household consumption is stored. 
 
 For ihs5, the data on food consumption was recorded as part of the household questionnaire (datasets starting w/ HH_). Within this questionnaire, data on food consumption is recorded in the module G (Food consumption). Within the module G, we find 3 sets of data, each one with different level of aggregation. We are interested in g1 which is food recorded at food item level (disaggregated data). 
 
 Hence, we need to load the file hh_mod_g1 (household questionaire module G, 1- consumption at item level). Once it is loaded, we can check that the file is loaded correctly by checking that the observations (cases) and variables match the one reported in the worldbank website (https://microdata.worldbank.org/index.php/catalog/3818)
+
 
 ```{r}
 #--- Load libraries 
@@ -22,7 +41,7 @@ library(tidyverse)
 options(scipen = 10, digits=3) 
 
 #--- Read in the file
-ihs5 <- haven::read_dta(here::here('HH_MOD_G1.dta'))
+ihs5 <- haven::read_dta(here::here('data', 'MWI_2019_IHS-V_v06_M_Stata', 'HH_MOD_G1.dta'))
 
 ```
 
@@ -497,7 +516,7 @@ ihs5$item_code[ihs5$item_oth=='PINEAPPLE'] <- 604
 
 ```{r}
 
-write.csv(ihs5, here::here('hh_mod_g_initial.csv'))
+write.csv(ihs5, here::here('inter-output', 'hh_mod_g_initial.csv'))
 
 ```
 
