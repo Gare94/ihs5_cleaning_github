@@ -154,7 +154,7 @@ ihs5 <- ihs5 %>% mutate(kg_d2=ifelse(!is.na(kg_d_replace),kg_d_replace, kg_d))
 
 >EDIBLE PORTIONS OF FOOD ITEMS
 
-This step entails removing food weights that were recalled as part of the HCES questionnaire but were never consumed in the household due to processing, preparation, or cooking. This includes food remnants such as banana peels, groundnut shells, and skin from peeled tubers, as well as bones from large fish that were discarded etc. As a result, we'll need to import a file containing Caloric conversion factor data from the World Bank's data catalog (https://microdata.worldbank.org/index.php/catalog/3818), which included information about the edible portion of each food item.
+This step entails removing food weights that were recalled as part of the HCES questionnaire but were never consumed in the household due to processing, preparation, or cooking. This includes food remnants such as banana peels, groundnut shells, and skin from peeled tubers, as well as bones from large fish that were discarded etc. As a result, we'll need to import a file containing Caloric conversion factor data from the World Bank's data catalog (https://microdata.worldbank.org/index.php/catalog/3818), which included information about the edible portion of each food item. However, the data is incomplete, as twenty food items lack edible portion information. To resolve the issue, we imputed edible portion factors using West Africa FCT (WFCT) and Kenyan FCT (KENFCT) accordingly. We used a "analyst's best estimate" for the items that still lacked edible portion factors. Therefore, the 'edible_portion_clean' is the complete file of edible portions of food items. 
 
 ```{r}
 
