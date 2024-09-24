@@ -22,10 +22,9 @@ Below is a directory tree that outlines the structure of the repository:
 │  ├─ 5_fgMatch.Rmd
 │  ├─ 6_fctMatchFinal.Rmd
 ├─ data/
-│  ├─ FAO.12fg.csv
-│  ├─ edible_portion_clean.csv                           
+│  ├─ edible_portion_clean.csv
+│  ├─ FAO.12fg.csv                       
 │  ├─ fct_ihs5_vv2.1.csv
-│  ├─ hme.final.csv
 │  ├─ ihs4factors_v5.xls
 │  ├─ ihs5.ame.factors.csv
 │  ├─ ihs5.ame.spec.csv

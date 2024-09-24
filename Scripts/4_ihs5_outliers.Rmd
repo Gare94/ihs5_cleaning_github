@@ -158,7 +158,7 @@ This step entails removing food weights that were recalled as part of the HCES q
 
 ```{r}
 
-EP <- read.csv (here::here('inter-output', 'edible_portion_clean.csv'))
+EP <- read.csv (here::here('data', 'edible_portion_clean.csv'))
 
 EP<- EP %>% select(item_code, edible_p)
 
