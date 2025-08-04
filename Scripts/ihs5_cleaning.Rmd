@@ -1,0 +1,695 @@
+---
+title: "IHS5_Cleaning"
+author: "Gareth Osman"
+date: "16/06/2025"
+output: html_document
+---
+
+INTRO 
+
+1) We need to identify where the data on household consumption is stored. 
+
+For ihs5, the data on food consumption was recorded as part of the household questionnaire (datasets starting w/ HH_). Within this questionnaire, data on food consumption is recorded in the module G (Food consumption). Within the module G, we find 3 sets of data, each one with different level of aggregation. We are interested in g1 which is food recorded at food item level (disaggregated data). 
+
+Hence, we need to load the file hh_mod_g1 (household questionaire module G, 1- consumption at item level). Once it is loaded, we can check that the file is loaded correctly by checking that the observations (cases) and variables match the one reported in the worldbank website (https://microdata.worldbank.org/index.php/catalog/3818)
+
+```{r}
+#--- Load libraries 
+library(haven)
+library(readxl)
+library(magrittr)
+library(tidyverse)
+
+#--- Change to show no scientific notation & round to 3 decimal places
+options(scipen = 10, digits=3) 
+
+#--- Read in the file
+ihs5 <- haven::read_dta(here::here('HH_MOD_G1.dta'))
+
+```
+
+>CHANGE VARIABLE NAMES AND DATA CLASS 
+
+The next step, the variables must then be standardized. However, if we want to standardize (or harmonize) our cleaning and processing structure, it is best to standardize variable names (when possible). Within the data dictionary we can find a description of each variable. And, below is the codebook with the new variable names.
+
+Variable category description: (i) hh_g03 refer to total consumption 
+                               (ii) hh_g04 refers to purchased by the household 
+                               (iii) hh_06 refers to food from own-production 
+                               (iv) hh_g07 refers to food consumed from gift (and                                         other sources). 
+
+Then, to identify variables that report quantity will be those that has an 'a' after the number (i.e. hh_g03a), variables reporting units will be identified by 'b' (i.e. hh_g07b, or hhg07b_label, hg07b_oth) and 'c' is for sub-unit related to photo aid guidance. 
+
+Codebook (https://microdata.worldbank.org/index.php/catalog/3818/data-dictionary)
+
+**Variable names need to be corrected!!** gift and purchased have the same code
+
+```{r}
+
+#--- Renaming variables to standard names 
+ ihs5 <- ihs5 %>% rename(
+      consYN = 'hh_g01',
+      item_code = 'hh_g02',
+      item_oth = 'hh_g01_oth')
+
+#G03: Quantity and units consumed of each food 
+ihs5 <- ihs5 %>% rename(
+      cons_quant = 'hh_g03a',
+      cons_unitA = 'hh_g03b',
+      cons_unit = 'hh_g03b_label',
+      cons_unit_oth = 'hh_g03b_oth',
+      cons_unit_size = 'hh_g03c')
+
+ihs5 <- ihs5 %>% select(HHID, consYN:cons_unit_size)
+
+```
+
+>EXTRACTING VALUES AND LABELS OF LABELED 'ITEM_CODE'
+
+The ihs5 dataset has stored the variable 'item_code' as an attribute (dbl+lbl). Hence we need to extract a two column data frame of value and label. The label and values are stored as an attribute of data frame. 
+
+```{r}
+ihs5 %>% distinct(item_code)
+
+ihs5_attr <- stack(attr(ihs5$item_code, 'labels')) 
+
+#Changing variable class
+ihs5_attr$values <- as.factor(ihs5_attr$values)
+ihs5$item_code <- as.factor(ihs5$item_code)
+
+#Merging the values and labels back into the ihs5 dataset
+ihs5 %>% 
+    left_join(., ihs5_attr, by=c("item_code" = "values"))
+ihs5 <- ihs5 %>% 
+     left_join(., ihs5_attr, by=c("item_code" = "values"))
+
+ihs5 <- ihs5 %>% relocate("ind", .after = item_code)
+ihs5 <- ihs5 %>% rename(item_name_original = 'ind') %>% arrange(HHID)
+
+ihs5$consYN <- as.factor(ihs5$consYN)
+ihs5$item_code <- as.factor(ihs5$item_code)
+ihs5$item_oth <- as.factor(ihs5$item_oth)
+ihs5$cons_quant <- as.numeric(ihs5$cons_quant)
+ihs5$cons_unitA <- as.character(ihs5$cons_unitA)
+ihs5$cons_unit <- as.character(ihs5$cons_unit)
+ihs5$cons_unit_oth <- as.factor(ihs5$cons_unit_oth)
+ihs5$cons_unit_size <- as.factor(ihs5$cons_unit_size)
+
+#Drop food too general, can't use in analysis
+ihs5 <- ihs5 %>% filter(!(item_code %in% c("829")))
+
+```
+
+>CLEANING UNITS LABELED AS 'OTHER'
+
+Food items and units are coming from a standard list. However, some food consumed by the household is not in that list of items, hence it was recorded under 'other'. The code to identify 'other food items' varies depending on the food group
+
+Similarly, for units, when the household was reporting the food consumed in a unit that it was not on the list, the unit code applied for 'other' was 23.
+
+There are a number of item units recorded as "23" but described as existing ucodes in our conversion factor file. We need to change these units from "23" to their appropriate units as it is in the 2020 cleaned conversion factor file. 
+Any item without a standard unit will be excluded in the analysis. 
+
+#CLEANING ITEMS LABELED AS 'OTHER'
+
+```{r}
+item_other <- ihs5 %>% count(item_oth) %>% arrange(desc(n)) %>% print(n = nrow(ihs5))
+
+```
+
+```{r}
+ihs5$item_code <- as.character(ihs5$item_code)
+ihs5$item_code[ihs5$item_oth=='SOYA'] <- 10001 #Assigning a new code 
+ihs5$item_code[ihs5$item_oth=='PEACHES'] <- 10002 #Assigning a new code
+ihs5$item_code[ihs5$item_oth=='EGG PLANT'] <- 10003 #Assigning a new code
+ihs5$item_code[ihs5$item_oth=='EGGS PLANTS'] <- 10003 #Assigning a new code
+ihs5$item_code[ihs5$item_oth=='MABILINGANO'] <- 10003 #Assigning a new code
+ihs5$item_code[ihs5$item_oth=='SORGHUM FLOUR'] <- 10004 #Assigning a new code
+ihs5$item_code[ihs5$item_oth=='SOHGUM FLOUR (UFA)'] <- 10004 #Assigning a new code
+ihs5$item_code[ihs5$item_oth=='DORGHUM FLOUR'] <- 10004 #Assigning a new code
+ihs5$item_code[ihs5$item_oth=='CASSAVA LEAVES'] <- 10005 #Assigning a new code
+ihs5$item_code[ihs5$item_oth=='NTAPASHA (CASSAVA LEAVES)'] <- 10005 #Assigning a new code
+ihs5$item_code[ihs5$item_oth=='NTAPASHA'] <- 10005 #Assigning a new code
+ihs5$item_code[ihs5$item_oth=='WATERMELON'] <- 10006 #Assigning a new code
+ihs5$item_code[ihs5$item_oth=='WATER MELON'] <- 10006 #Assigning a new code
+ihs5$item_code[ihs5$item_oth=='WILD LOQUAT'] <- 608
+ihs5$item_code[ihs5$item_oth=='FRIED MIXTURE OF MAIZE FLOUR/BANANA AND SODA'] <- 827
+ihs5$item_code[ihs5$item_oth=='MIXTURE OF MAIZE FLOUR/BANANA/SUGAR'] <- 827
+ihs5$item_code[ihs5$item_oth=='COW PEAS'] <- 308
+ihs5$item_code[ihs5$item_oth=='NKHUNGUZU'] <- 302
+ihs5$item_code[ihs5$item_oth=='POWDERED JUICE'] <- 906
+ihs5$item_code[ihs5$item_oth=='MUCUNA'] <- 837
+ihs5$item_code[ihs5$item_oth=='NKHWANI'] <- 404
+ihs5$item_code[ihs5$item_oth=='FROZY'] <- 907
+
+ihs5$item_code[ihs5$item_oth=='GUAVAS'] <- 606
+ihs5$item_code[ihs5$item_oth=='ZIBWENTE'] <- 821
+ihs5$item_code[ihs5$item_oth=='ZIBHWENTE'] <- 821
+ihs5$item_code[ihs5$item_oth=='ZIBWEMPWE'] <- 821
+ihs5$item_code[ihs5$item_oth=='ZIGEDE'] <- 821
+ihs5$item_code[ihs5$item_oth=='CHIGEGE'] <- 821
+ihs5$item_code[ihs5$item_oth=='WINE'] <- 914
+ihs5$item_code[ihs5$item_oth=='KHOBWE'] <- 308
+ihs5$item_code[ihs5$item_oth=='MKHAKA'] <- 409
+ihs5$item_code[ihs5$item_oth=='RAPE'] <- 403
+ihs5$item_code[ihs5$item_oth=='PEAGION PEAS'] <- 303
+ihs5$item_code[ihs5$item_oth=='MAPIRA'] <- 108
+ihs5$item_code[ihs5$item_oth=='GRASSHOPPER'] <- 511
+ihs5$item_code[ihs5$item_oth=='LOCUST'] <- 511
+ihs5$item_code[ihs5$item_oth=='ZIWALA'] <- 511
+ihs5$item_code[ihs5$item_oth=='MPILU'] <- 403
+ihs5$item_code[ihs5$item_oth=='KHOLOWA'] <- 407
+ihs5$item_code[ihs5$item_oth=='CHISOSO'] <- 407
+ihs5$item_code[ihs5$item_oth=='BONONGWE'] <- 407
+ihs5$item_code[ihs5$item_oth=='KHWANYA'] <- 407
+ihs5$item_code[ihs5$item_oth=='KWANYA'] <- 407
+ihs5$item_code[ihs5$item_oth=='MTAMBE'] <- 407
+ihs5$item_code[ihs5$item_oth=='LUNI'] <- 407
+ihs5$item_code[ihs5$item_oth=='CHAMWAMBA'] <- 407
+ihs5$item_code[ihs5$item_oth=='CHITAMBE'] <- 407
+ihs5$item_code[ihs5$item_oth=='THERERE'] <- 411
+ihs5$item_code[ihs5$item_oth=='GATHERED THERERE'] <- 411
+ihs5$item_code[ihs5$item_oth=='KATATA'] <- 411
+ihs5$item_code[ihs5$item_oth=='PUMPKINS'] <- 410
+ihs5$item_code[ihs5$item_oth=='THERERE WACHINYOLOMONYA'] <- 411
+ihs5$item_code[ihs5$item_oth=='THERERE WAMASAMBA'] <- 411
+ihs5$item_code[ihs5$item_oth=='WILD THERERE'] <- 411
+ihs5$item_code[ihs5$item_oth=='DUCK'] <- 509
+ihs5$item_code[ihs5$item_oth=='ANTELOPE'] <- 505
+ihs5$item_code[ihs5$item_oth=='BIRD'] <- 509
+ihs5$item_code[ihs5$item_oth=='TSETSENYA (LOOKS LIKE IMSECTS'] <- 511
+ihs5$item_code[ihs5$item_oth=='CHIBUKU BEER'] <- 908
+ihs5$item_code[ihs5$item_oth=='FIRST CHOICE MILK'] <- 701
+ihs5$item_code[ihs5$item_oth=='SODA'] <- 812
+ihs5$item_code[ihs5$item_oth=='ROYCO'] <- 811
+ihs5$item_code[ihs5$item_oth=='MIXED BEANS'] <- 302
+ihs5$item_code[ihs5$item_oth=='RED BEANS'] <- 302
+ihs5$item_code[ihs5$item_oth=='YELLOW BEANS'] <- 302
+ihs5$item_code[ihs5$item_oth=='ROASTED SWEET POTATO'] <- 832
+ihs5$item_code[ihs5$item_oth=='IRISH POTATOES'] <- 205
+ihs5$item_code[ihs5$item_oth=='PEPPER'] <- 811
+ihs5$item_code[ihs5$item_oth=='YAMS'] <- 208
+ihs5$item_code[ihs5$item_oth=='COCOYAMS'] <- 208
+ihs5$item_code[ihs5$item_oth=='COOKED SWEET POTATOES (VENDORS)'] <- 831
+ihs5$item_code[ihs5$item_oth=='NKHWALI'] <- 509
+ihs5$item_code[ihs5$item_oth=='BAKES'] <- 906
+ihs5$item_code[ihs5$item_oth=='BAKES JUICE'] <- 906
+ihs5$item_code[ihs5$item_oth=='DRAGON  FROZY'] <- 907
+ihs5$item_code[ihs5$item_oth=='JOLKY JUS'] <- 906
+ihs5$item_code[ihs5$item_oth=='JOLLY JAS JUICE'] <- 906
+ihs5$item_code[ihs5$item_oth=='THUMPS UP'] <- 907
+ihs5$item_code[ihs5$item_oth=='WAKA JUICE'] <- 906
+ihs5$item_code[ihs5$item_oth=='MEXICAN APPLE'] <- 609
+ihs5$item_code[ihs5$item_oth=='CUSTARD APPLE'] <- 609
+ihs5$item_code[ihs5$item_oth=='LEMON'] <- 603
+ihs5$item_code[ihs5$item_oth=='WILD FRUIT'] <- 608
+ihs5$item_code[ihs5$item_oth=='MAXICAN APPLE'] <- 609
+ihs5$item_code[ihs5$item_oth=='WILD PASSION FRUIT'] <- 608
+ihs5$item_code[ihs5$item_oth=='MEAN APPLE'] <- 609
+ihs5$item_code[ihs5$item_oth=='CUCUMBER'] <- 409
+ihs5$item_code[ihs5$item_oth=='PINEAPPLE'] <- 604
+ihs5$item_code[ihs5$item_oth=='NANAZI'] <- 604
+
+```
+
+```{r}
+#units listed as "other" and have not been converted to standard units
+ihs5 %>% filter(cons_unitA==23) %>% count(cons_unit_oth) %>% arrange(desc(n)) %>% print(n = nrow(ihs5))
+
+ihs5 %>% filter(., cons_unit_oth=="HEAP") %>% select(item_name_original, item_code, cons_quant, cons_unitA, cons_unit, cons_unit_oth) %>% arrange(item_name_original) %>% print(n = nrow(ihs5))
+
+ihs5 %>% filter(item_code=="803") %>% select(item_name_original, item_code, cons_quant, cons_unitA, cons_unit, cons_unit_oth) %>% arrange(desc(cons_unitA))  %>% print(n = nrow(ihs5))
+
+```
+
+```{r}
+
+ihs5[ihs5$cons_unit_oth == "PACKET", "cons_unitA"] <- '51'
+ihs5[ihs5$cons_unit_oth == "PACKET UNSPECIFIED", "cons_unitA"] <- '51'
+ihs5[ihs5$cons_unit_oth == "TABLESALT PACKET", "cons_unitA"] <- '51'
+ihs5[ihs5$cons_unit_oth == "PACKET MEDIUM", "cons_unitA"] <- '51'
+ihs5[ihs5$cons_unit_oth == "MEDIUM PACKET", "cons_unitA"] <- '51'
+ihs5[ihs5$cons_unit_oth == "SATCHET", "cons_unitA"] <- '22'
+ihs5[ihs5$cons_unit_oth == "TUB", "cons_unitA"] <- '22'
+ihs5[ihs5$cons_unit_oth == "TBE", "cons_unitA"] <- '22'
+ihs5[ihs5$cons_unit_oth == "SA HETS", "cons_unitA"] <- '22'
+ihs5[ihs5$cons_unit_oth == "TINA", "cons_unitA"] <- '25'
+ihs5[ihs5$cons_unit_oth == "GRAMS", "cons_unitA"] <- '18'
+ihs5[ihs5$cons_unit_oth == "G", "cons_unitA"] <- '18'
+ihs5[ihs5$cons_unit_oth == "PACKET (SMALL)", "cons_unitA"] <- '54'
+ihs5[ihs5$cons_unit_oth == "SMALL PACKET", "cons_unitA"] <- '54'
+ihs5[ihs5$cons_unit_oth == "SMALL PACKAGE", "cons_unitA"] <- '54'
+ihs5[ihs5$cons_unit_oth == "SMALL POCKET", "cons_unitA"] <- '54'
+ihs5[ihs5$cons_unit_oth == "SMALL  PACKET", "cons_unitA"] <- '54'
+ihs5[ihs5$cons_unit_oth == "PIECE", "cons_unitA"] <- '9'
+ihs5[ihs5$cons_unit_oth == "MANGO", "cons_unitA"] <- '9'
+ihs5[ihs5$cons_unit_oth == "BUNCH", "cons_unitA"] <- '8'
+ihs5[ihs5$cons_unit_oth == "BATCHES", "cons_unitA"] <- '8'
+ihs5[ihs5$cons_unit_oth == "BUNDLE", "cons_unitA"] <- '8'
+ihs5[ihs5$cons_unit_oth == "MILLILITRE", "cons_unitA"] <- '19'
+ihs5[ihs5$cons_unit_oth == "5L BUCKET", "cons_unitA"] <- '26'
+ihs5[ihs5$cons_unit_oth == "PAIL (SMALL)", "cons_unitA"] <- '4A'
+ihs5[ihs5$cons_unit_oth == "TABLE SPOON", "cons_unitA"] <- '59'
+ihs5[ihs5$cons_unit_oth == "PAIL", "cons_unitA"] <- '4'
+ihs5[ihs5$cons_unit_oth == "KILOGRAM", "cons_unitA"] <- '1'
+ihs5[ihs5$cons_unit_oth == "PAIL (LARGE)", "cons_unitA"] <- '4C'
+ihs5[ihs5$cons_unit_oth == "PAIL (MEDIUM)", "cons_unitA"] <- '4B'
+ihs5[ihs5$cons_unit_oth == "LITRE", "cons_unitA"] <- '15'
+ihs5[ihs5$cons_unit_oth == "TINA FLAT", "cons_unitA"] <- '25A'
+ihs5[ihs5$cons_unit_oth == "SMALL TINA FLAT", "cons_unitA"] <- '25A'
+ihs5[ihs5$cons_unit_oth == "SATCHET (SMALL)", "cons_unitA"] <- '22A'
+ihs5[ihs5$cons_unit_oth == "SMALL SACHET", "cons_unitA"] <- '22A'
+ihs5[ihs5$cons_unit_oth == "SMALL SARCHET", "cons_unitA"] <- '22A'
+ihs5[ihs5$cons_unit_oth == "TINA HEAPED", "cons_unitA"] <- '25B'
+ihs5[ihs5$cons_unit_oth == "HEAP TINA", "cons_unitA"] <- '25B'
+ihs5[ihs5$cons_unit_oth == "TINA (HEAPED)", "cons_unitA"] <- '25B'
+ihs5[ihs5$cons_unit_oth == "CLUSTER", "cons_unitA"] <- '44'
+ihs5[ihs5$cons_unit_oth == "PACKET LARGE", "cons_unitA"] <- '55'
+ihs5[ihs5$cons_unit_oth == "BIG PACKET", "cons_unitA"] <- '55'
+ihs5[ihs5$cons_unit_oth == "SMALL HEAP", "cons_unitA"] <- '10A'
+ihs5[ihs5$cons_unit_oth == "HEAP(SMALL)", "cons_unitA"] <- '10A'
+ihs5[ihs5$cons_unit_oth == "LARGE HEAP", "cons_unitA"] <- '10C'
+ihs5[ihs5$cons_unit_oth == "SMALL TIN", "cons_unitA"] <- '71'
+ihs5[ihs5$cons_unit_oth == "MEDIUM SACHET", "cons_unitA"] <- '22B'
+ihs5[ihs5$cons_unit_oth == "MEDIAM SACHET", "cons_unitA"] <- '22B'
+ihs5[ihs5$cons_unit_oth == "BUNCH SMALL", "cons_unitA"] <- '8A'
+ihs5[ihs5$cons_unit_oth == "LARGE  SATCHET", "cons_unitA"] <- '22C'
+ihs5[ihs5$cons_unit_oth == "SACHET  LARGE", "cons_unitA"] <- '22C'
+ihs5[ihs5$cons_unit_oth == "HEAP (MEDIUM)", "cons_unitA"] <- '10B'
+ihs5[ihs5$cons_unit_oth == "HEAP", "cons_unitA"] <- '10'
+ihs5[ihs5$cons_unit_oth == "HALF PACKET", "cons_unitA"] <- '36'
+ihs5[ihs5$cons_unit_oth == "50 GRAM", "cons_unitA"] <- '42'
+ihs5[ihs5$cons_unit_oth == "500 GRAM", "cons_unitA"] <- '36'
+ihs5[ihs5$cons_unit_oth == "100 GRAM", "cons_unitA"] <- '43'
+ihs5[ihs5$cons_unit_oth == "200 GRAM", "cons_unitA"] <- '99D'
+ihs5[ihs5$cons_unit_oth == "50 KG",  "cons_unitA"] <- '105A'
+
+ihs5[ihs5$item_code %in% c(404, 829, 101, 821, 107, 901, 102, 104, 608, 108, 103, 202) & ihs5$cons_unit_oth == 'PLATE', 'cons_unitA'] <- '7'
+ihs5[ihs5$item_code %in% c(205, 411, 407, 408, 413, 601, 313, 406, 511, 402, 606, 801, 810) & ihs5$cons_unit_oth == 'PLATE', 'cons_unitA'] <- '6'
+ihs5[ihs5$item_code %in% c(302, 305, 301) & ihs5$cons_unit_oth == 'PLATE', 'cons_unitA'] <- '6B'
+ihs5[ihs5$item_code %in% c(302, 305, 311, 303, 307, 308, 312) & ihs5$cons_unit_oth == 'PLATE', 'cons_unitA'] <- '7B'
+
+#Assigning new Ucodes as they doesnt exist on the list of units 
+ihs5[ihs5$item_code==907 & ihs5$cons_unit_oth=='BOTTLE (SMALL)','cons_unitA'] <- '102A'
+ihs5[ihs5$item_code==912 & ihs5$cons_unit_oth=='BOTTLE (SMALL)','cons_unitA'] <- '103A'
+ihs5[ihs5$item_code==803 & ihs5$cons_unit_oth=='BOTTLE (SMALL)','cons_unitA'] <- '102A'
+ihs5[ihs5$item_code==911 & ihs5$cons_unit_oth=='BOTTLE (SMALL)','cons_unitA'] <- '104A'
+ihs5[ihs5$item_code==910 & ihs5$cons_unit_oth=='BOTTLE (SMALL)','cons_unitA'] <- '103A'
+ihs5[ihs5$item_code==814 & ihs5$cons_unit_oth=='BOTTLE (SMALL)','cons_unitA'] <- '99A'
+ihs5[ihs5$item_code==914 & ihs5$cons_unit_oth=='BOTTLE (SMALL)','cons_unitA'] <- '103A'
+ihs5[ihs5$item_code==905 & ihs5$cons_unit_oth=='BOTTLE (SMALL)','cons_unitA'] <- '109A'
+ihs5[ihs5$item_code==813 & ihs5$cons_unit_oth=='BOTTLE (SMALL)','cons_unitA'] <- '35'
+ihs5[ihs5$item_code==817 & ihs5$cons_unit_oth=='BOTTLE (SMALL)','cons_unitA'] <- '72'
+
+ihs5$cons_unitA[ihs5$item_code == 10001 & ihs5$cons_unit_oth == '90 GRAM'] <- '51'
+ihs5$cons_unitA[ihs5$item_code == 10002 & ihs5$cons_unit_oth == '90 GRAM'] <- '51'
+ihs5[ihs5$item_code==104 & ihs5$cons_unit_oth=='LARGE TINA', 'cons_unitA'] <- '25'
+ihs5[ihs5$item_code==101 & ihs5$cons_unit_oth=='NDOWA', 'cons_unitA'] <- '4B'
+ihs5[ihs5$item_code==111 & ihs5$cons_unit_oth=='HALF LOAF', 'cons_unitA'] <- '31'
+ihs5[ihs5$item_code==111 & ihs5$cons_unit_oth=='LOAF', 'cons_unitA'] <- '32'
+ihs5[ihs5$item_code==112 & ihs5$cons_unit_oth=='N/A', 'cons_unitA'] <- '9'
+ihs5[ihs5$item_code==306 & ihs5$cons_unit_oth=='PACKET OF 125 GRAMS', 'cons_unitA'] <- '106A'
+ihs5[ihs5$item_code==501 & ihs5$cons_unit_oth=='CRATE', 'cons_unitA'] <- '75'
+ihs5[ihs5$item_code==505 & ihs5$cons_unit_oth=='250 GRAM', 'cons_unitA'] <- '65'
+ihs5[ihs5$item_code==506 & ihs5$cons_unit_oth=='QUOTER', 'cons_unitA'] <- '80'
+ihs5[ihs5$item_code==601 & ihs5$cons_unit_oth=='SLICE', 'cons_unitA'] <- '9'
+ihs5[ihs5$item_code==701 & ihs5$cons_unit_oth=='PACKET (MEDIUM)', 'cons_unitA'] <- '99B'
+ihs5[ihs5$item_code==702 & ihs5$cons_unit_oth=='70 GRAM', 'cons_unitA'] <- '107A'
+ihs5[ihs5$item_code==703 & ihs5$cons_unit_oth=='20G', 'cons_unitA'] <- '108A'
+ihs5[ihs5$item_code==706 & ihs5$cons_unit_oth=='BOTTLE (SMALL)', 'cons_unitA'] <- '99B'
+
+```
+
+> stage 2: CLEANING UNITS LABELED AS 'OTHER' to match the conversion factor file 
+
+#The food conversion factor file contains several food items that share the same unit name but have distinct conversion factors. The other unit is denoted by the code '23', which stands for 'Others'. To avoid duplications during the global database merge, I assigned a unique code in the ihs5 food conversion factor file to each code labeled with '23' in the unit code. Hence this chuck of code prioritizes the factors that carry the same unit name labelled as 'other'. This is because though the unit name was the same but in reality they were different types of units thats why the 'other unit' which was not part of the standard unit was recorded as 'Other' in the global database. As a result, the cleaning targeted specific food items that had such cases of unit measure.Additionally, there were non-standard units such as COB, DOZEN, and TRAY etc included in the conversion factors, but they were new units. Hence, I assigned a unique code to those as well. 
+
+```{r}
+
+ihs5[ihs5$cons_unit_oth == "BASIN", "cons_unitA"] <- '97'
+ihs5[ihs5$cons_unit_oth == "CUP", "cons_unitA"] <- '84'
+ihs5[ihs5$cons_unit_oth == "PAIL (UNSPECIFIED)", "cons_unitA"] <- '4D'
+ihs5[ihs5$cons_unit_oth == "TRAY", "cons_unitA"] <- '75'
+ihs5[ihs5$cons_unit_oth == "WHOLE", "cons_unitA"] <- '76'
+ihs5[ihs5$cons_unit_oth == "20 LITRE PAIL", "cons_unitA"] <- '4E'
+ihs5[ihs5$cons_unit_oth == "COB", "cons_unitA"] <- '77'
+ihs5[ihs5$cons_unit_oth == "DOZEN", "cons_unitA"] <- '78'
+ihs5[ihs5$cons_unit_oth == "FULL", "cons_unitA"] <- '79'
+ihs5[ihs5$cons_unit_oth == "QUARTER", "cons_unitA"] <- '80'
+ihs5[ihs5$cons_unit_oth == "10L BUCKET", "cons_unitA"] <- '81'
+ihs5[ihs5$cons_unit_oth == "3LITRE BUCKET", "cons_unitA"] <- '82'
+ihs5[ihs5$cons_unit_oth == "GABA PAIL", "cons_unitA"] <- '4F'
+ihs5[ihs5$cons_unit_oth == "HALF PAIL", "cons_unitA"] <- '4G'
+ihs5[ihs5$cons_unit_oth =='RUBE', 'cons_unitA'] <- '83'
+
+ihs5[ihs5$item_code==103 & ihs5$cons_unit_oth=='PAIL (SMALL)', 'cons_unitA'] <- '87'
+ihs5[ihs5$item_code==303 & ihs5$cons_unit_oth=='PAIL (SMALL)', 'cons_unitA'] <- '87'
+ihs5[ihs5$item_code==203 & ihs5$cons_unit_oth=='PAIL (MEDIUM)', 'cons_unitA'] <- '89'
+ihs5[ihs5$item_code==203 & ihs5$cons_unit_oth=='PAIL', 'cons_unitA'] <- '92'
+ihs5[ihs5$item_code==601 & ihs5$cons_unit_oth=='PAIL (LARGE)', 'cons_unitA'] <- '88'
+ihs5[ihs5$item_code==404 & ihs5$cons_unit_oth=='BUNDLE', 'cons_unitA'] <- '91'
+ihs5[ihs5$item_code==306 & ihs5$cons_unit_oth=='PLATE', 'cons_unitA'] <- '94'
+ihs5[ihs5$item_code==602 & ihs5$cons_unit_oth=='BUNCH SMALL', 'cons_unitA'] <- '93'
+ihs5[ihs5$item_code==810 & ihs5$cons_unit_oth=='SMALL PACKET', 'cons_unitA'] <- '90'
+ihs5[ihs5$item_code==810 & ihs5$cons_unit_oth=='SMALL PACKAGE', 'cons_unitA'] <- '95'
+ihs5[ihs5$item_code==810 & ihs5$cons_unit_oth=='TBE', 'cons_unitA'] <- '96'
+ihs5[ihs5$item_code==306 & ihs5$cons_unit_oth=='90 GRAM','cons_unitA'] <- '51'
+ihs5[ihs5$item_code==301 & ihs5$cons_unit_oth=='90 GRAM','cons_unitA'] <- '99'
+ihs5[ihs5$item_code==810 & ihs5$cons_unit_oth=='125G PACKET','cons_unitA'] <- '99C'
+ihs5[ihs5$item_code==113 & ihs5$cons_unit_oth=='90 GRAM','cons_unitA'] <- '99'
+ihs5[ihs5$item_code==113 & ihs5$cons_unit_oth=='60 GRAMS','cons_unitA'] <- '99F'
+ihs5[ihs5$item_code==116 & ihs5$cons_unit_oth=='300GRAMS','cons_unitA'] <- '99G'
+
+```
+
+###Create data frame only of food items actually consumed by HH
+
+```{r}
+#Create unique ID variable
+ihs5$measure_id <- paste0(as.character(ihs5$item_code), "_", as.character(ihs5$cons_unitA))
+ 
+#Creating dataframe of food items consumed by household 
+ihs5 <- ihs5 %>% filter(!is.na(cons_quant))
+ihs5 <- ihs5 %>% filter(cons_quant !=0)
+
+```
+
+#CONVERT NON-STANDARD UNITS (NSU) TO KGs
+This aims to convert all food consumption quantities reported in NSU into KGs consumed of each food item. 
+Background: This R-markdown converts HCES food consumption data from standard (e.g. mL, L, g) and non-standard units (e.g. pail, basin, heaps) to kilograms in order to compare household food consumption. Conversion factors for non-standard units (NSUs) equal the mass (in kg) of one unit of each food item. Hence, a conversion factor is required for each food item-unit combination.
+
+```{r}
+#--- Read in the files
+hh_id <- haven::read_dta(here::here('hh_mod_a_filt.dta'))
+ihs5factor <- read.csv(here::here('ihs5_factors.csv'))
+ihs4factor <- read_excel (here::here('ihs4_factors.xls'))
+
+```
+
+> Create  data frame
+
+1. Label households by region
+Food consumption data and geographic region data are located in different parts of the survey. Bring the two pieces of information together and merge.
+
+```{r}
+
+region <- hh_id %>% select(HHID, region)
+ihs5factor <- ihs5factor %>% select(region:factor)
+
+ihs4factor <- ihs4factor %>% select(measure_id:unit, ihs4factor_n:ihs4factor_s)
+
+```
+
+> Merge region 
+
+```{r}
+
+ihs5 <- ihs5 %>% left_join(., region, by = c("HHID" = "HHID")) %>% arrange(HHID)
+
+```
+
+>Merge food-unit specific NSU factor 
+  
+Merge in the NSU factors by food item based on what NSU unit each household reported consuming that food item. Maintain the variation in unit volumes/mass by region.
+
+```{r}
+
+#Change data class 
+ihs5factor$item_code <- as.factor(ihs5factor$item_code)
+ihs5factor$region <- as.factor(ihs5factor$region)
+ihs5factor$unit_code <- as.factor(ihs5factor$unit_code)
+ihs5$region <- as.factor(ihs5$region)
+ihs5$item_code <- as.factor(ihs5$item_code)
+
+#Creating a unique id of fcode, ucode and rcode
+ihs5$measure_id <- paste0(as.character(ihs5$measure_id), "_", as.character(ihs5$region))
+
+ihs5factor$measure_id <- paste0(as.character(ihs5factor$item_code), "_", as.character(ihs5factor$unit_code), "_", as.character(ihs5factor$region))
+
+ihs5 <- ihs5 %>% left_join(., ihs5factor, by = c("measure_id" = "measure_id")) %>% arrange(HHID)
+
+ihs5 <- ihs5 %>% rename(item_name_factor = 'item_name')
+
+##Food unit codes in IHS5 without available factors from ihs5 conversion factor database
+ihs5 %>% filter(.,is.na(factor)) %>% count()
+
+```
+
+>REPLACE IN MISSING FACTORS(NAs) WITH AVAILABLE IHS4_FACTORS
+
+```{r}
+
+#Renaming variables 
+names(ihs4factor) [names(ihs4factor) == 'ihs4factor_n'] <- '1'
+names(ihs4factor) [names(ihs4factor) == 'ihs4factor_c'] <- '2'
+names(ihs4factor) [names(ihs4factor) == 'ihs4factor_s'] <- '3'
+
+
+#Gather wide columns into a longer column by increasing the number of rows and decreasing the number of columns
+ihs4factor <- pivot_longer(ihs4factor, cols=6:8, names_to= "Region_ihs4factor", values_to = "ihs4factors", values_drop_na = TRUE)
+
+#Renaming variables
+ihs4factor <- ihs4factor %>% rename(
+ ihs4_fcode = 'fcode',
+ihs4_item = 'item',
+ihs4_ucode = 'ucode',
+ihs4_unit = 'unit')
+
+#creating a unique id of fcode, ucode and rcode in the ihs4factor
+ihs4factor$measure_id <- paste0(as.character(ihs4factor$measure_id), "_", as.character(ihs4factor$Region_ihs4factor))
+ 
+ihs4factor <- ihs4factor %>% filter(ihs4factors != 0)
+
+#Replace missing factors with available ihs4_factors
+for (i in 1:nrow(ihs5)) {
+  if (is.na(ihs5$factor[i])) {
+    match_index <- match(ihs5$measure_id[i], ihs4factor$measure_id)
+    if (!is.na(match_index)) {
+      ihs5$factor[i] <- ihs4factor$ihs4factors[match_index]
+    }
+  }
+}
+
+ihs5 <- ihs5 %>% rename(item_code = "item_code.x")
+
+```
+
+>CONVERT NON-STANDARD UNITS TO KGs
+
+Calculate the quantity of each food item consumed in Kg
+(Quantity of the food item consumed in the NSU) X (NSU factor)
+
+```{r}
+
+ihs5 <- ihs5 %>% filter(!is.na(factor))
+ihs5$cons_kg <- ihs5$cons_quant * ihs5$factor
+
+```
+
+>Convert to quantity consumed per day
+
+IHS5 conducted a 7-day recall. To calculate total consumed per day, just divide by 7. 
+
+```{r}
+
+ihs5$kg_d <- ihs5$cons_kg/7
+
+```
+
+#Convert consumption from kg to g
+1 kilogram (kg) = 1,000 grams (g)
+
+```{r}
+
+ihs5$gram_d <- ihs5$kg_d*1000
+
+```
+
+#Non-edible portions of food items
+
+This step requires us to eliminate food weight that would have been recalled as part of the IHS5 questionnaire, but would not have actually been consumed due to processing or preparation. This includes parts of food like banana peels, skins of fruits and tubers that would have been peeled, bones of large fish that would have been discarded etc. For these data, I used values provided by the World Bank in Malawi IHS5. The values were cross referred with the Western African and Kenyan FCTs for accuracy. 
+
+```{r}
+
+EP <-read.csv (here::here('edible_portion_clean.csv'))
+EP<- EP %>% select(item_code, edible_p)
+
+EP$item_code <- as.factor(EP$item_code)
+ihs5$item_code <- as.factor(ihs5$item_code)
+
+ihs5 <- merge(x=ihs5, y=EP, by.x='item_code', by.y='item_code', fill=-9999, all.x = TRUE )
+
+ihs5$gram_d_nep <- ihs5$gram_d * (ihs5$edible_p/100)
+
+```
+
+#Identify outliers for each food
+
+>Consumption quantity generally tends to be non-normally distributed with a right skew, so to define a more approriate cut-off, I log-transformed the distribution to normalize and then take +5SD from the mean to identify households with potential unreasonable consumption estimates. For this analysis, it's slightly more complicated since there were a number of consumption quantities <1, meaning the log transformed value would be negative making calculating the SD a bit more challenging. To overcome this, for each consumption value I just applied the fuction f(x) = log(x)+1 to ensure that SDs (or in this case SD+1) could be calculated for all food items. 
+
+```{r}
+
+hhafe <- read.csv(here::here("afe_ihs5.csv"))
+ihs5 <- ihs5 %>% arrange(HHID)
+
+ihs5 <- merge(x=ihs5, y=hhafe, by.x ="HHID", by.y = "HHID", fill=-9999, all.x = TRUE)
+
+ihs5$g_afe_d <- ihs5$gram_d_nep/ihs5$hhafe
+
+```
+
+#Plotting the distribution of the food items 
+#plot a histogram with boxplot and QQ plot of the food items in x indicating any probable outliers by Tukey's criterion
+
+```{r}
+
+summaplot<-function(x,varname){
+x<-na.omit(x)
+if(missing(varname)){varname<-"x"}
+
+Q1<-quantile(x,prob=0.25)
+Q3<-quantile(x,prob=0.75)
+Q2<-quantile(x,prob=0.5)
+hspread<-Q3-Q1
+Fu<-Q3+3*hspread
+Fl<-Q1-3*hspread
+
+ols<-which(x<Fl)
+oll<-which(x>Fu)
+posols<-which(x<(Q1-1.5*hspread))
+if(length(posols)==0){
+lw<-min(x)}else{
+lw<-min(x[-posols])}
+posoll<-which(x>(Q3+1.5*hspread))
+if(length(posoll)==0){
+uw<-max(x)}else{
+uw<-max(x[-posoll])}
+
+ol<-c(ols,oll) # combined outlier set
+par(mfrow=c(1,2))
+ymax<-max((hist(x,plot=F))$counts)
+hist(x,main="",col="AliceBlue", xlab=varname,ylim=c(0,(ymax*1.25)))
+
+boxmin<-ymax*1.1
+boxmax<-ymax*1.2
+boxmid<-ymax*1.15
+
+lines(c(Q1,Q3),c(boxmin,boxmin))
+lines(c(Q1,Q3),c(boxmax,boxmax))
+lines(c(Q1,Q1),c(boxmin,boxmax))
+lines(c(Q3,Q3),c(boxmin,boxmax))
+lines(c(Q1,lw),c(boxmid,boxmid))
+lines(c(Q3,uw),c(boxmid,boxmid))
+lines(c(Q2,Q2),c(boxmin,boxmax),lwd=2)
+
+lines(c(Fu,Fu),c(10,boxmid),lty=5,col="red")
+lines(c(Fl,Fl),c(10,boxmid),lty=5,col="red")
+
+qqn<-qqnorm(x,main="",pch=16)
+qqline(x)
+points(qqn$x[ol],qqn$y[ol],pch=16,col="red")
+
+}
+
+```
+
+```{r}
+#Consumption (gram/AFE/day) (106= Milk, 141=cooking oil, 111= margarine, etc)
+ihs5 %>% filter(item_code==111) %$% summaplot(g_afe_d)
+
+ihs5 <- ihs5 %>% mutate(log.g_afe_d.plus1 =log(g_afe_d+1))
+
+```
+
+#Calculating medians & SD 
+
+```{r}
+
+consed.summ <- ihs5 %>% group_by(item_code) %>% 
+    summarise(n=n(), 
+          mean.logplus1=mean(log(g_afe_d+1), na.rm = TRUE), 
+          median=median(g_afe_d, na.rm = TRUE), 
+          sd.logplus1=sd(log(g_afe_d+1), na.rm = TRUE))
+
+consed.summ.merg <- consed.summ %>% mutate(sd5 = sd.logplus1*5) %>% select(item_code, mean.logplus1, median, sd5)
+
+consed.summ.merg <- consed.summ.merg %>% mutate(cut5 = sd5 + mean.logplus1) %>% select(item_code, median, cut5)
+
+ihs5 <- ihs5 %>% left_join(., consed.summ.merg, by=("item_code")) %>% arrange(HHID)
+
+ihs5 <- ihs5 %>% mutate(ol5 = cut5-log.g_afe_d.plus1)
+ihs5 <- ihs5 %>% mutate(outlier5 = ifelse(ol5<0, 1, NA)) 
+
+ihs5$outlier.id <- paste0(as.character(ihs5$HHID),"_", as.character(ihs5$item_code))
+
+outliers <- ihs5 %>% filter(outlier5==1) %>% arrange(item_code)
+
+outliers$sdg5 <- 10^outliers$cut5-1
+outliers$g_d_replace <-outliers$median * outliers$hhafe
+
+#write.csv(outliers, here::here('ihs5.outliers.5sd.csv'))
+ 
+outliers.c <- outliers %>% select(outlier.id, g_d_replace)
+ 
+outlier_unique <- outliers.c %>% distinct()
+
+ihs5 <- merge(x=ihs5, y=outlier_unique , by.x='outlier.id', by.y='outlier.id', fill=-9999, all.x = TRUE)
+
+ihs5 <- ihs5 %>% mutate(gram_d_nep2=ifelse(!is.na(g_d_replace),g_d_replace, gram_d_nep))
+
+```
+
+# Convert the quantity to per 100 grams to match with the FCT
+```{r}
+
+ihs5$quantity_per_100g <- ihs5$gram_d_nep2/100
+
+```
+
+#Adding food groups 
+
+```{r}
+
+foodgroup <- read.csv(here::here('food_groups.csv'))
+foodgroup <- select(foodgroup, -X)
+
+```
+
+>Labeling food groups of food items
+
+We need to add a variable to group items by the food group that a food item fell under according to the FAO food groups for HDD. There are 12 food groups in total: 
+Cereals; Vegetables; Milk & milk products; Fats & oils; Legumes & nuts; Fruits; Eggs; Meat; Fish; Sugary foods/beverages; Roots & tubers; and Miscellaneous
+
+```{r}
+
+ihs5 <- merge(x=ihs5, y=foodgroup, by.x='item_code', by.y='code', fill=-9999, all.x = TRUE)
+ihs5 <- ihs5 %>% rename(food.group ='Category')
+
+#ihs5 <- ihs5 %>% rename(g100_d_nep = "quantity_per_100g")
+#Archive
+#write.csv(ihs5, here::here('ihs5_cons_EP.csv'), row.names = FALSE)
+
+```
+
+#Combining food consumption quantity with food composition data 
+
+```{r}
+
+fctmatch <- read.csv(here::here('fct_ihs5_v1.0.csv'))
+
+
+ihs5$item_code <- as.factor(ihs5$item_code)
+fctmatch$ihs5_foodid <- as.factor(fctmatch$ihs5_foodid)
+
+ihs5 <- merge(x=ihs5, y=fctmatch , by.x='item_code', by.y='ihs5_foodid', fill=-9999, all.x = TRUE) %>% arrange(HHID)
+
+ihs5 <- ihs5 %>% select(HHID, item_code, ihs5_fooditem, food.group, quantity_per_100g, ENERC1:FE, K:ZN)
+
+
+```
+
+#Archive
+
+```{r}
+
+write.csv(ihs5, here::here('ihs5_cons_final.csv'), row.names = FALSE)
+
+```
